@@ -1,0 +1,61 @@
+{
+	"folders": [
+		{
+			"name": "Es 1 - WiFi Connection",
+			"path": "Es 1 - WiFi Connection"
+		},
+		{
+			"name": "Es 2 - Call An API",
+			"path": "Es 2 - Call An API"
+		},
+		{
+			"name": "Es 3 - Provide An API",
+			"path": "Es 3 - Provide An API"
+		},
+		{
+			"name": "Es 4 - Web Server",
+			"path": "Es 4 - Web Server"
+		},
+		{
+			"name": "Es 5 - Web Server + EEPROM",
+			"path": "Es 5 - Web Server + EEPROM"
+		},
+		{
+			"name": "Es 6 - Time Management",
+			"path": "Es 6 - Time Management"
+		},
+		{
+			"name": "Es 7 - Access Point",
+			"path": "Es 7 - Access Point"
+		},
+		{
+			"name": "Es 8 - Find Devices",
+			"path": "Es 8 - Find Devices"
+		},
+		{
+			"name": "Es 9 - Watch Dog",
+			"path": "Es 9 - Watch Dog"
+		},
+		{
+			"name": "Studenti 1 - AP and WiFi",
+			"path": "Studenti 1 - AP and WiFi"
+		},
+		{
+			"name": "Studenti 2 - Alarm Clock",
+			"path": "Studenti 2 - Alarm Clock"
+		},
+		{
+			"name": "Studenti 3 - PingPong",
+			"path": "Studenti 3 - PingPong"
+		},
+		{
+			"name": "MQTT Client",
+			"path": "MQTT Client"
+		},
+		{
+			"name": "MQTT Connection from PC",
+			"path": "MQTT Connection from PC"
+		}
+	],
+	"settings": {}
+}
