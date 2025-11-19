@@ -7,10 +7,10 @@ const char* ssid = "Wokwi-GUEST";
 const char* pass = "";
 
 // MQTT Broker settings
-const char* mqtt_server = "b9ceb1210949418299c6e35315cd2170.s2.eu.hivemq.cloud";  // Public broker for testing; use your broker's address for production
+const char* mqtt_server = "dc8a6f487f8345a28185940816d843d4.s1.eu.hivemq.cloud";  // Public broker for testing; use your broker's address for production
 const int mqtt_port = 8883;                     // Standard MQTT port
-const char* mqtt_user = "username";             // Optional; for brokers requiring authentication
-const char* mqtt_password = "password";
+const char* mqtt_user = "connector";             // Optional; for brokers requiring authentication
+const char* mqtt_password = "moseJacopo1";
 const char* topic = "testTopic";               // Specify your topic
 
 WiFiClientSecure espClient;
@@ -162,6 +162,7 @@ void setup(){
 
   espClient.setCACert(root_ca);
   // Set up MQTT client
+  Serial.println("Connecting to: " + String(mqtt_server));
   client.setServer(mqtt_server, mqtt_port);
   client.setCallback(callback);
 }
