@@ -2,17 +2,47 @@
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
 #include <Arduino.h>
+#include <ArduinoJson.h>
+#include <DHT.h>
 
-const char* ssid = "Wokwi-GUEST";
-const char* pass = "";
+#define DHTTYPE DHT22
+#define MAX_PUMPS 5
+
+// --- MQTT Topics ---
+String macAddress;
+String topicHello = "greenhouse/sensor/hello";
+String topicStatus;
+String topicConfig;
+String topicCheck;
+
+// --- Config dinamica ---
+String deviceName = "default";
+
+float thresholdMin = 40.0;
+float thresholdMax = 60.0;
+
+unsigned long updateInterval = 5000;
+unsigned long lastUpdate = 0;
+
+int humidityPin = 14;
+
+int pumpPins[MAX_PUMPS];
+int pumpCount = 0;
+
+// --- DHT dinamico ---
+DHT *dht = nullptr;
+
+const char *ssid = "Wokwi-GUEST";
+const char *pass = "";
 
 // MQTT Broker settings
-const char* mqtt_server = "dc8a6f487f8345a28185940816d843d4.s1.eu.hivemq.cloud";  // Public broker for testing; use your broker's address for production
-const int mqtt_port = 8883;                     // Standard MQTT port
-const char* mqtt_user = "connector";             // Optional; for brokers requiring authentication
-const char* mqtt_password = "moseJacopo1";
-const char* topic = "testTopic";               // Specify your topic
+const char *mqtt_server = "dc8a6f487f8345a28185940816d843d4.s1.eu.hivemq.cloud"; // Public broker for testing; use your broker's address for production
+const int mqtt_port = 8883;                                                      // Standard MQTT port
+const char *mqtt_user = "connector";                                             // Optional; for brokers requiring authentication
+const char *mqtt_password = "moseJacopo1";
+const char *topic = "testTopic"; // Specify your topic
 
+const char *greenhouseSensors = "greenhouse/sensor";
 WiFiClientSecure espClient;
 PubSubClient client(espClient);
 
@@ -50,49 +80,61 @@ emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
 -----END CERTIFICATE-----
 )EOF";
 
-void reconnect() {
-  while (!client.connected()) {
+void reconnect()
+{
+  while (!client.connected())
+  {
     Serial.print("Attempting MQTT connection...");
-    if (client.connect("ESP8266Client", mqtt_user, mqtt_password)) {
-      Serial.println("Connected to MQTT!");
-      client.subscribe(topic);
-    } else {
+    if (client.connect(macAddress.c_str(), mqtt_user, mqtt_password))
+    {
+
+      client.subscribe(topicConfig.c_str());
+      client.subscribe(topicCheck.c_str());
+
+      client.publish(topicHello.c_str(),
+                     ("hello sono connesso " + macAddress).c_str());
+
+      Serial.println("MQTT Connected");
+    }
+    else
+    {
       Serial.print("Failed to connect. Error code: ");
       int errorCode = client.state();
       Serial.print(errorCode);
-      
+
       // Display more detailed error message based on error code
-      switch (errorCode) {
-        case -4:
-          Serial.println(" (MQTT_CONNECTION_TIMEOUT)");
-          break;
-        case -3:
-          Serial.println(" (MQTT_CONNECTION_LOST)");
-          break;
-        case -2:
-          Serial.println(" (MQTT_CONNECT_FAILED)");
-          break;
-        case -1:
-          Serial.println(" (MQTT_DISCONNECTED)");
-          break;
-        case 1:
-          Serial.println(" (MQTT_CONNECT_BAD_PROTOCOL)");
-          break;
-        case 2:
-          Serial.println(" (MQTT_CONNECT_BAD_CLIENT_ID)");
-          break;
-        case 3:
-          Serial.println(" (MQTT_CONNECT_UNAVAILABLE)");
-          break;
-        case 4:
-          Serial.println(" (MQTT_CONNECT_BAD_CREDENTIALS)");
-          break;
-        case 5:
-          Serial.println(" (MQTT_CONNECT_UNAUTHORIZED)");
-          break;
-        default:
-          Serial.println(" (Unknown Error)");
-          break;
+      switch (errorCode)
+      {
+      case -4:
+        Serial.println(" (MQTT_CONNECTION_TIMEOUT)");
+        break;
+      case -3:
+        Serial.println(" (MQTT_CONNECTION_LOST)");
+        break;
+      case -2:
+        Serial.println(" (MQTT_CONNECT_FAILED)");
+        break;
+      case -1:
+        Serial.println(" (MQTT_DISCONNECTED)");
+        break;
+      case 1:
+        Serial.println(" (MQTT_CONNECT_BAD_PROTOCOL)");
+        break;
+      case 2:
+        Serial.println(" (MQTT_CONNECT_BAD_CLIENT_ID)");
+        break;
+      case 3:
+        Serial.println(" (MQTT_CONNECT_UNAVAILABLE)");
+        break;
+      case 4:
+        Serial.println(" (MQTT_CONNECT_BAD_CREDENTIALS)");
+        break;
+      case 5:
+        Serial.println(" (MQTT_CONNECT_UNAUTHORIZED)");
+        break;
+      default:
+        Serial.println(" (Unknown Error)");
+        break;
       }
 
       Serial.println("Retrying in 5 seconds...");
@@ -102,63 +144,94 @@ void reconnect() {
 }
 
 // Callback function for receiving messages
-void callback(char* topicCallBack, byte* payload, unsigned int length) {
-  Serial.print("Message received on topic: ");
-  Serial.print(topicCallBack);
- 
-  
-   Serial.print(". Message: ");
+void callback(char *topicCallBack, byte *payload, unsigned int length)
+{
+
   String message;
-  for (int i = 0; i < length; i++) {
-    message += (char)payload[i];  // Convert *byte to string
+  for (int i = 0; i < length; i++)
+  {
+    message += (char)payload[i];
   }
-  Serial.print(message);
-  String atTopic = String(topicCallBack);
-  Serial.println(atTopic);
-  if(atTopic.equals("ledone")){
-    Serial.println("Equa");
-    if(message.equals("1")){
-      Serial.println("equa 1");
+
+  String incomingTopic = String(topicCallBack);
+
+  Serial.println("Topic: " + incomingTopic);
+  Serial.println("Payload: " + message);
+
+  // CONFIG
+  if (incomingTopic == topicConfig)
+  {
+
+    StaticJsonDocument<512> doc;
+    DeserializationError error = deserializeJson(doc, message);
+
+    if (error)
+    {
+      Serial.println("Errore parsing JSON");
+      return;
     }
-    if(message.equals("2")){
-      Serial.println("equa 2");
+
+    deviceName = doc["name"] | "unknown";
+    thresholdMin = doc["thresholdMin"] | 40.0;
+    thresholdMax = doc["thresholdMax"] | 60.0;
+    humidityPin = doc["pinHumidity"] | 14;
+    updateInterval = doc["updateInterval"] | 5000;
+
+    JsonArray pumps = doc["pinPumps"];
+    pumpCount = 0;
+
+    for (JsonVariant v : pumps)
+    {
+      if (pumpCount < MAX_PUMPS)
+      {
+        pumpPins[pumpCount] = v.as<int>();
+        pinMode(pumpPins[pumpCount], OUTPUT);
+        digitalWrite(pumpPins[pumpCount], LOW);
+        pumpCount++;
+      }
     }
-    int numberMessage = message.toInt();
-    switch(numberMessage){
-      case 1:
-        Serial.println("equa 111");
-      break;
-      case 2:
-      Serial.println("equa 222");
-      break;
-      case 3:
-      Serial.println("equa 333");
-      break;
-      case 4:
-      Serial.println("equa 444");
-      break;
-      case 5:
-      Serial.println("equa 555");
-      break;
-      case 6:
-      Serial.println("equa 666");
-      break;
+
+    if (dht != nullptr)
+    {
+      delete dht;
     }
+
+    dht = new DHT(humidityPin, DHTTYPE);
+    dht->begin();
+
+    Serial.println("Configurazione aggiornata");
   }
-  Serial.println();
+
+  // CHECK (ping/pong)
+  if (incomingTopic == topicCheck)
+  {
+    client.publish(topicCheck.c_str(), "pong");
+  }
 }
 
-void setup(){
+void setup()
+{
   Serial.begin(115200);
-  
+
   Serial.print("Connecting to WiFi...");
   // WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, pass);
-  while (WiFi.status() != WL_CONNECTED) {
+  while (WiFi.status() != WL_CONNECTED)
+  {
     delay(500);
     Serial.print(".");
   }
   Serial.println("Connected!");
+
+  // DHT inizializzato dopo config
+
+  macAddress = WiFi.macAddress();
+  macAddress.replace(":", "");
+
+  // Costruzione topic dinamici
+  topicStatus = "greenhouse/sensor/status/" + macAddress;
+  topicConfig = "greenhouse/sensor/config/" + macAddress;
+  topicCheck = "greenhouse/sensor/check/" + macAddress;
 
   espClient.setCACert(root_ca);
   // Set up MQTT client
@@ -167,19 +240,82 @@ void setup(){
   client.setCallback(callback);
 }
 
-void loop(){
+float readHumidity()
+{
+  if (dht == nullptr)
+    return -1;
+
+  float h = dht->readHumidity();
+  if (isnan(h))
+    return -1;
+
+  return h;
+}
+
+void controlPumps(float humidity)
+{
+
+  if (humidity < 0)
+    return;
+
+  if (humidity < thresholdMin)
+  {
+    for (int i = 0; i < pumpCount; i++)
+    {
+      digitalWrite(pumpPins[i], HIGH);
+    }
+  }
+
+  if (humidity > thresholdMax)
+  {
+    for (int i = 0; i < pumpCount; i++)
+    {
+      digitalWrite(pumpPins[i], LOW);
+    }
+  }
+}
+
+void loop()
+{
   // Ensure MQTT connection
-  if (!client.connected()) {
+  if (!client.connected())
+  {
     reconnect();
   }
   client.loop();
 
   // Publish a test message every 5 seconds
   static unsigned long lastMsg = 0;
-  if (millis() - lastMsg > 5000) {
-    lastMsg = millis();
-    String message = "Hello from ESP8266!";
-    client.publish(topic, message.c_str());
-    Serial.println("Message published");
+
+  if (millis() - lastUpdate > updateInterval)
+  {
+
+    lastUpdate = millis();
+
+    float humidity = readHumidity();
+
+    controlPumps(humidity);
+
+    bool pumpActive = false;
+    for (int i = 0; i < pumpCount; i++)
+    {
+      if (digitalRead(pumpPins[i]) == HIGH)
+      {
+        pumpActive = true;
+        break;
+      }
+    }
+
+    StaticJsonDocument<256> statusDoc;
+    statusDoc["name"] = deviceName;
+    statusDoc["humidity"] = humidity;
+    statusDoc["pumpActive"] = pumpActive;
+
+    String output;
+    serializeJson(statusDoc, output);
+
+    client.publish(topicStatus.c_str(), output.c_str());
+
+    Serial.println(output);
   }
 }
