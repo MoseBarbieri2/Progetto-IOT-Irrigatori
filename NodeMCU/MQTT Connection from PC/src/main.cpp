@@ -16,15 +16,13 @@ String topicConfig;
 String topicCheck;
 
 // --- Config dinamica ---
-String deviceName = "default";
-
-float thresholdMin = 40.0;
-float thresholdMax = 60.0;
-
-unsigned long updateInterval = 5000;
+String deviceName;
+float thresholdMin;
+float thresholdMax;
+unsigned long updateInterval;
+int humidityPin;
+bool isConfigured = false;
 unsigned long lastUpdate = 0;
-
-int humidityPin = 14;
 
 int pumpPins[MAX_PUMPS];
 int pumpCount = 0;
@@ -92,7 +90,7 @@ void reconnect()
       client.subscribe(topicCheck.c_str());
 
       client.publish(topicHello.c_str(),
-                     ("hello sono connesso " + macAddress).c_str());
+                     (macAddress).c_str());
 
       Serial.println("MQTT Connected");
     }
@@ -171,11 +169,11 @@ void callback(char *topicCallBack, byte *payload, unsigned int length)
       return;
     }
 
-    deviceName = doc["name"] | "unknown";
-    thresholdMin = doc["thresholdMin"] | 40.0;
-    thresholdMax = doc["thresholdMax"] | 60.0;
-    humidityPin = doc["pinHumidity"] | 14;
-    updateInterval = doc["updateInterval"] | 5000;
+    deviceName = doc["name"].as<String>();
+    thresholdMin = doc["thresholdMin"].as<float>();
+    thresholdMax = doc["thresholdMax"].as<float>();
+    humidityPin = doc["pinHumidity"].as<int>();
+    updateInterval = doc["updateInterval"].as<unsigned long>();
 
     JsonArray pumps = doc["pinPumps"];
     pumpCount = 0;
@@ -200,6 +198,8 @@ void callback(char *topicCallBack, byte *payload, unsigned int length)
     dht->begin();
 
     Serial.println("Configurazione aggiornata");
+    isConfigured = true;
+    Serial.println("Device configurato → ACTIVE");
   }
 
   // CHECK (ping/pong)
@@ -286,10 +286,13 @@ void loop()
 
   // Publish a test message every 5 seconds
   static unsigned long lastMsg = 0;
+  if (!isConfigured)
+  {
+    return;
+  }
 
   if (millis() - lastUpdate > updateInterval)
   {
-
     lastUpdate = millis();
 
     float humidity = readHumidity();
