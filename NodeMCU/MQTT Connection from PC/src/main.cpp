@@ -183,7 +183,7 @@ void saveConfigToEEPROM()
 
   EEPROM.put(0, cfg);
   EEPROM.commit(); // fondamentale su ESP32, altrimenti non scrive davvero
-  Serial.println("Configurazione salvata in EEPROM");
+  Serial.println("Configuration saved to EEPROM");
 }
 
 void checkResetButton()
@@ -193,7 +193,7 @@ void checkResetButton()
   if (digitalRead(RESET_BUTTON_PIN) == LOW && millis() - lastPress > 1000)
   {
     lastPress = millis();
-    Serial.println("Pulsante reset premuto → riavvio dispositivo...");
+    Serial.println("Reset button pressed : restarting device...");
     delay(100); // piccolo debounce
     ESP.restart();
   }
@@ -223,7 +223,7 @@ void callback(char *topicCallBack, byte *payload, unsigned int length)
 
     if (error)
     {
-      Serial.println("Errore parsing JSON");
+      Serial.println("Error parsing JSON: " + String(error.c_str()));
       return;
     }
 
@@ -272,7 +272,7 @@ bool loadConfigFromEEPROM()
   EEPROM.get(0, cfg);
 
   if (cfg.magic != CONFIG_MAGIC) {
-    Serial.println("Nessuna configurazione valida in EEPROM");
+    Serial.println("NO valid configuration found in EEPROM");
     return false;
   }
 
@@ -295,7 +295,7 @@ bool loadConfigFromEEPROM()
   dht = new DHT(humidityPin, DHTTYPE);
   dht->begin();
 
-  Serial.println("Configurazione caricata da EEPROM");
+  Serial.println("Configuration taken from EEPROM");
   return true;
 }
 
@@ -326,7 +326,7 @@ void setup()
 
   if (loadConfigFromEEPROM()) {
     isConfigured = true;
-    Serial.println("Device già configurato → ACTIVE da subito");
+    Serial.println("Device already configured : ACTIVE from now on");
   }
 
   espClient.setCACert(root_ca);
