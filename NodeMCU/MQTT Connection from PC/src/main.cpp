@@ -11,6 +11,9 @@
 #define CONFIG_MAGIC 0xABCD1234
 #define MAX_NAME_LEN 32
 
+//Pulsante reset configurazione
+#define RESET_BUTTON_PIN 4
+
 
 //DHT sensore epompe
 #define DHTTYPE DHT22
@@ -21,7 +24,6 @@ String macAddress;
 String topicHello = "greenhouse/sensor/hello";
 String topicStatus;
 String topicConfig;
-String topicCheck;
 
 // --- Config dinamica
 String deviceName;
@@ -111,7 +113,6 @@ void reconnect()
     {
 
       client.subscribe(topicConfig.c_str());
-      client.subscribe(topicCheck.c_str());
 
       client.publish(topicHello.c_str(),
                      (macAddress).c_str());
@@ -185,6 +186,19 @@ void saveConfigToEEPROM()
   Serial.println("Configurazione salvata in EEPROM");
 }
 
+void checkResetButton()
+{
+  static unsigned long lastPress = 0;
+
+  if (digitalRead(RESET_BUTTON_PIN) == LOW && millis() - lastPress > 1000)
+  {
+    lastPress = millis();
+    Serial.println("Pulsante reset premuto → riavvio dispositivo...");
+    delay(100); // piccolo debounce
+    ESP.restart();
+  }
+}
+
 // Callback function for receiving messages
 void callback(char *topicCallBack, byte *payload, unsigned int length)
 {
@@ -240,19 +254,14 @@ void callback(char *topicCallBack, byte *payload, unsigned int length)
     dht = new DHT(humidityPin, DHTTYPE);
     dht->begin();
 
-    Serial.println("Configurazione aggiornata");
+    Serial.println("Configuration updated");
     isConfigured = true;
-    Serial.println("Device configurato → ACTIVE");
+    Serial.println("Device Configured");
 
     saveConfigToEEPROM();
 
   }
 
-  // CHECK (ping/pong)
-  if (incomingTopic == topicCheck)
-  {
-    client.publish(topicCheck.c_str(), "pong");
-  }
 }
 
 
@@ -314,7 +323,6 @@ void setup()
   // Costruzione topic dinamici
   topicStatus = "greenhouse/sensor/status/" + macAddress;
   topicConfig = "greenhouse/sensor/config/" + macAddress;
-  topicCheck = "greenhouse/sensor/check/" + macAddress;
 
   if (loadConfigFromEEPROM()) {
     isConfigured = true;
@@ -326,6 +334,8 @@ void setup()
   Serial.println("Connecting to: " + String(mqtt_server));
   client.setServer(mqtt_server, mqtt_port);
   client.setCallback(callback);
+
+  pinMode(RESET_BUTTON_PIN, INPUT_PULLUP);
 }
 
 bool useSimulatedHumidity = true; // put it false to use real DHT 
@@ -442,4 +452,6 @@ void loop()
 
     Serial.println(output);
   }
+
+  checkResetButton();
 }
