@@ -243,8 +243,15 @@ void setup()
   client.setCallback(callback);
 }
 
+bool useSimulatedHumidity = true; // put it false to use real DHT 
+
 float readHumidity()
 {
+  if (useSimulatedHumidity)
+  {
+    return simulatedHumidity;
+  }
+
   if (dht == nullptr)
     return -1;
 
@@ -278,6 +285,32 @@ void controlPumps(float humidity)
   }
 }
 
+void updateSimulatedHumidity()
+{
+  if (millis() - lastHumidityChange >= humidityChangeInterval)
+  {
+    lastHumidityChange = millis();
+
+    bool pumpActive = false;
+    for (int i = 0; i < pumpCount; i++)
+    {
+      if (digitalRead(pumpPins[i]) == HIGH)
+      {
+        pumpActive = true;
+        break;
+      }
+    }
+
+    simulatedHumidity += pumpActive ? 1 : -1;
+
+    // clamp tra 0 e 100
+    if (simulatedHumidity > 100)
+      simulatedHumidity = 100;
+    if (simulatedHumidity < 0)
+      simulatedHumidity = 0;
+  }
+}
+
 void loop()
 {
   // Ensure MQTT connection
@@ -294,15 +327,16 @@ void loop()
     return;
   }
 
+  updateSimulatedHumidity();
+
   if (millis() - lastUpdate > updateInterval)
   {
     lastUpdate = millis();
 
     float humidity = readHumidity();
-
     controlPumps(humidity);
-
     bool pumpActive = false;
+
     for (int i = 0; i < pumpCount; i++)
     {
       if (digitalRead(pumpPins[i]) == HIGH)
