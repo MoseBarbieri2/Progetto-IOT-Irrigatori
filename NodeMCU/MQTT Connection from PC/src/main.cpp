@@ -4,18 +4,26 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <DHT.h>
+#include <EEPROM.h>
 
+// definizione EEPROM
+#define EEPROM_SIZE 256
+#define CONFIG_MAGIC 0xABCD1234
+#define MAX_NAME_LEN 32
+
+
+//DHT sensore epompe
 #define DHTTYPE DHT22
 #define MAX_PUMPS 5
 
-// --- MQTT Topics ---
+// --- MQTT Topics
 String macAddress;
 String topicHello = "greenhouse/sensor/hello";
 String topicStatus;
 String topicConfig;
 String topicCheck;
 
-// --- Config dinamica ---
+// --- Config dinamica
 String deviceName;
 float thresholdMin;
 float thresholdMax;
@@ -24,6 +32,19 @@ int humidityPin;
 bool isConfigured = false;
 unsigned long lastUpdate = 0;
 
+// -- Configurazione salvata in EEPROM
+struct StoredConfig {
+  uint32_t magic;
+  char deviceName[MAX_NAME_LEN];
+  float thresholdMin;
+  float thresholdMax;
+  int humidityPin;
+  unsigned long updateInterval;
+  int pumpPins[MAX_PUMPS];
+  int pumpCount;
+};
+
+// -- Massimo numero pompe irrigatore
 int pumpPins[MAX_PUMPS];
 int pumpCount = 0;
 
@@ -31,7 +52,7 @@ int pumpCount = 0;
 DHT *dht = nullptr;
 float simulatedHumidity = 50.0; // valore di partenza, modificalo se vuoi
 unsigned long lastHumidityChange = 0;
-const unsigned long humidityChangeInterval = 5000; // 5 secondi, fisso
+const unsigned long humidityChangeInterval = 1000; // 1 secondo, fisso
 
 const char *ssid = "Wokwi-GUEST";
 const char *pass = "";
@@ -144,6 +165,26 @@ void reconnect()
   }
 }
 
+void saveConfigToEEPROM()
+{
+  StoredConfig cfg;
+  cfg.magic = CONFIG_MAGIC;
+  deviceName.toCharArray(cfg.deviceName, MAX_NAME_LEN);
+  cfg.thresholdMin = thresholdMin;
+  cfg.thresholdMax = thresholdMax;
+  cfg.humidityPin = humidityPin;
+  cfg.updateInterval = updateInterval;
+  cfg.pumpCount = pumpCount;
+
+  for (int i = 0; i < pumpCount; i++) {
+    cfg.pumpPins[i] = pumpPins[i];
+  }
+
+  EEPROM.put(0, cfg);
+  EEPROM.commit(); // fondamentale su ESP32, altrimenti non scrive davvero
+  Serial.println("Configurazione salvata in EEPROM");
+}
+
 // Callback function for receiving messages
 void callback(char *topicCallBack, byte *payload, unsigned int length)
 {
@@ -176,8 +217,7 @@ void callback(char *topicCallBack, byte *payload, unsigned int length)
     thresholdMin = doc["thresholdMin"].as<float>();
     thresholdMax = doc["thresholdMax"].as<float>();
     humidityPin = doc["pinHumidity"].as<int>();
-    updateInterval = doc["updateInterval"].as<unsigned long>();
-
+    updateInterval = doc["updateInterval"].as<unsigned long>() * 1000; // Conversione in millisecondi
     JsonArray pumps = doc["pinPumps"];
     pumpCount = 0;
 
@@ -203,6 +243,9 @@ void callback(char *topicCallBack, byte *payload, unsigned int length)
     Serial.println("Configurazione aggiornata");
     isConfigured = true;
     Serial.println("Device configurato → ACTIVE");
+
+    saveConfigToEEPROM();
+
   }
 
   // CHECK (ping/pong)
@@ -212,9 +255,46 @@ void callback(char *topicCallBack, byte *payload, unsigned int length)
   }
 }
 
+
+
+bool loadConfigFromEEPROM()
+{
+  StoredConfig cfg;
+  EEPROM.get(0, cfg);
+
+  if (cfg.magic != CONFIG_MAGIC) {
+    Serial.println("Nessuna configurazione valida in EEPROM");
+    return false;
+  }
+
+  deviceName = String(cfg.deviceName);
+  thresholdMin = cfg.thresholdMin;
+  thresholdMax = cfg.thresholdMax;
+  humidityPin = cfg.humidityPin;
+  updateInterval = cfg.updateInterval;
+  pumpCount = cfg.pumpCount;
+
+  for (int i = 0; i < pumpCount; i++) {
+    pumpPins[i] = cfg.pumpPins[i];
+    pinMode(pumpPins[i], OUTPUT);
+    digitalWrite(pumpPins[i], LOW);
+  }
+
+  if (dht != nullptr) {
+    delete dht;
+  }
+  dht = new DHT(humidityPin, DHTTYPE);
+  dht->begin();
+
+  Serial.println("Configurazione caricata da EEPROM");
+  return true;
+}
+
 void setup()
 {
   Serial.begin(115200);
+
+  EEPROM.begin(EEPROM_SIZE);
 
   Serial.print("Connecting to WiFi...");
   // WiFi.mode(WIFI_STA);
@@ -235,6 +315,11 @@ void setup()
   topicStatus = "greenhouse/sensor/status/" + macAddress;
   topicConfig = "greenhouse/sensor/config/" + macAddress;
   topicCheck = "greenhouse/sensor/check/" + macAddress;
+
+  if (loadConfigFromEEPROM()) {
+    isConfigured = true;
+    Serial.println("Device già configurato → ACTIVE da subito");
+  }
 
   espClient.setCACert(root_ca);
   // Set up MQTT client
@@ -326,7 +411,6 @@ void loop()
   {
     return;
   }
-
   updateSimulatedHumidity();
 
   if (millis() - lastUpdate > updateInterval)
