@@ -29,6 +29,9 @@ int pumpCount = 0;
 
 // --- DHT dinamico ---
 DHT *dht = nullptr;
+float simulatedHumidity = 50.0; // valore di partenza, modificalo se vuoi
+unsigned long lastHumidityChange = 0;
+const unsigned long humidityChangeInterval = 5000; // 5 secondi, fisso
 
 const char *ssid = "Wokwi-GUEST";
 const char *pass = "";
