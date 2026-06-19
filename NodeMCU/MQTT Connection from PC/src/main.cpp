@@ -5,6 +5,7 @@
 #include <ArduinoJson.h>
 #include <DHT.h>
 #include <EEPROM.h>
+#include "env.h"
 
 // definizione EEPROM
 #define EEPROM_SIZE 256
@@ -57,16 +58,6 @@ float simulatedHumidity = 50.0; // valore di partenza, modificalo se vuoi
 unsigned long lastHumidityChange = 0;
 const unsigned long humidityChangeInterval = 1000; // 1 secondo, fisso
 
-const char *ssid = "Wokwi-GUEST";
-const char *pass = "";
-
-// MQTT Broker settings
-const char *mqtt_server = "dc8a6f487f8345a28185940816d843d4.s1.eu.hivemq.cloud"; // Public broker for testing; use your broker's address for production
-const int mqtt_port = 8883;                                                      // Standard MQTT port
-const char *mqtt_user = "connector";                                             // Optional; for brokers requiring authentication
-const char *mqtt_password = "moseJacopo1";
-const char *topic = "testTopic"; // Specify your topic
-
 const char *greenhouseSensors = "greenhouse/sensor";
 WiFiClientSecure espClient;
 PubSubClient client(espClient);
@@ -110,7 +101,7 @@ void reconnect()
   while (!client.connected())
   {
     Serial.print("Attempting MQTT connection...");
-    if (client.connect(macAddress.c_str(), mqtt_user, mqtt_password))
+    if (client.connect(macAddress.c_str(), MQTT_USER, MQTT_PASSWORD))
     {
 
       client.subscribe(topicConfig.c_str());
@@ -333,7 +324,7 @@ void setup()
 
   Serial.print("Connecting to WiFi...");
   // WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, pass);
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
   while (WiFi.status() != WL_CONNECTED)
   {
     delay(500);
@@ -361,8 +352,8 @@ void setup()
 
   espClient.setCACert(root_ca);
   // Set up MQTT client
-  Serial.println("Connecting to: " + String(mqtt_server));
-  client.setServer(mqtt_server, mqtt_port);
+  Serial.println("Connecting to: " + String(MQTT_SERVER));
+  client.setServer(MQTT_SERVER, MQTT_PORT);
   client.setCallback(callback);
 
   pinMode(RESET_BUTTON_PIN, INPUT_PULLUP);
