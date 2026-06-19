@@ -245,6 +245,14 @@ void callback(char *topicCallBack, byte *payload, unsigned int length)
       ESP.restart();
     }
 
+    if (doc["name"].isNull() || doc["updateInterval"].isNull() ||
+        doc["pinHumidity"].isNull() || doc["thresholdMin"].isNull() ||
+        doc["thresholdMax"].isNull())
+    {
+      Serial.println("Invalid config received (null fields), ignoring...");
+      return;
+    }
+
     deviceName = doc["name"].as<String>();
     thresholdMin = doc["thresholdMin"].as<float>();
     thresholdMax = doc["thresholdMax"].as<float>();
