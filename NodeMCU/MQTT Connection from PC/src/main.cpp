@@ -11,11 +11,10 @@
 #define CONFIG_MAGIC 0xABCD1234
 #define MAX_NAME_LEN 32
 
-//Pulsante reset configurazione
+// Pulsante reset configurazione
 #define RESET_BUTTON_PIN 4
 
-
-//DHT sensore epompe
+// DHT sensore epompe
 #define DHTTYPE DHT22
 #define MAX_PUMPS 5
 
@@ -35,7 +34,8 @@ bool isConfigured = false;
 unsigned long lastUpdate = 0;
 
 // -- Configurazione salvata in EEPROM
-struct StoredConfig {
+struct StoredConfig
+{
   uint32_t magic;
   char deviceName[MAX_NAME_LEN];
   float thresholdMin;
@@ -44,6 +44,7 @@ struct StoredConfig {
   unsigned long updateInterval;
   int pumpPins[MAX_PUMPS];
   int pumpCount;
+  char macAddress[18]; // MAC address in string format
 };
 
 // -- Massimo numero pompe irrigatore
@@ -114,8 +115,11 @@ void reconnect()
 
       client.subscribe(topicConfig.c_str());
 
-      client.publish(topicHello.c_str(),
-                     (macAddress).c_str());
+      if (!isConfigured)
+      {
+        client.publish(topicHello.c_str(), macAddress.c_str());
+        Serial.println("Hello sent, waiting for configuration...");
+      }
 
       Serial.println("MQTT Connected");
     }
@@ -176,8 +180,10 @@ void saveConfigToEEPROM()
   cfg.humidityPin = humidityPin;
   cfg.updateInterval = updateInterval;
   cfg.pumpCount = pumpCount;
+  macAddress.toCharArray(cfg.macAddress, sizeof(cfg.macAddress));
 
-  for (int i = 0; i < pumpCount; i++) {
+  for (int i = 0; i < pumpCount; i++)
+  {
     cfg.pumpPins[i] = pumpPins[i];
   }
 
@@ -227,6 +233,18 @@ void callback(char *topicCallBack, byte *payload, unsigned int length)
       return;
     }
 
+    if (doc["reset"] == true)
+    {
+      Serial.println("Reset command received: clearing EEPROM and restarting...");
+      for (int i = 0; i < EEPROM_SIZE; i++)
+      {
+        EEPROM.write(i, 0);
+      }
+      EEPROM.commit();
+      delay(100);
+      ESP.restart();
+    }
+
     deviceName = doc["name"].as<String>();
     thresholdMin = doc["thresholdMin"].as<float>();
     thresholdMax = doc["thresholdMax"].as<float>();
@@ -259,19 +277,16 @@ void callback(char *topicCallBack, byte *payload, unsigned int length)
     Serial.println("Device Configured");
 
     saveConfigToEEPROM();
-
   }
-
 }
-
-
 
 bool loadConfigFromEEPROM()
 {
   StoredConfig cfg;
   EEPROM.get(0, cfg);
 
-  if (cfg.magic != CONFIG_MAGIC) {
+  if (cfg.magic != CONFIG_MAGIC)
+  {
     Serial.println("NO valid configuration found in EEPROM");
     return false;
   }
@@ -282,14 +297,17 @@ bool loadConfigFromEEPROM()
   humidityPin = cfg.humidityPin;
   updateInterval = cfg.updateInterval;
   pumpCount = cfg.pumpCount;
+  macAddress = String(cfg.macAddress);
 
-  for (int i = 0; i < pumpCount; i++) {
+  for (int i = 0; i < pumpCount; i++)
+  {
     pumpPins[i] = cfg.pumpPins[i];
     pinMode(pumpPins[i], OUTPUT);
     digitalWrite(pumpPins[i], LOW);
   }
 
-  if (dht != nullptr) {
+  if (dht != nullptr)
+  {
     delete dht;
   }
   dht = new DHT(humidityPin, DHTTYPE);
@@ -315,16 +333,20 @@ void setup()
   }
   Serial.println("Connected!");
 
-  // DHT inizializzato dopo config
+  bool hasConfig = loadConfigFromEEPROM();
 
-  macAddress = WiFi.macAddress();
-  macAddress.replace(":", "");
+  if (!hasConfig || macAddress.length() == 0)
+  {
+    macAddress = WiFi.macAddress();
+    macAddress.replace(":", "");
+  }
 
   // Costruzione topic dinamici
   topicStatus = "greenhouse/sensor/status/" + macAddress;
   topicConfig = "greenhouse/sensor/config/" + macAddress;
 
-  if (loadConfigFromEEPROM()) {
+  if (hasConfig)
+  {
     isConfigured = true;
     Serial.println("Device already configured : ACTIVE from now on");
   }
@@ -338,7 +360,7 @@ void setup()
   pinMode(RESET_BUTTON_PIN, INPUT_PULLUP);
 }
 
-bool useSimulatedHumidity = true; // put it false to use real DHT 
+bool useSimulatedHumidity = true; // put it false to use real DHT
 
 float readHumidity()
 {
