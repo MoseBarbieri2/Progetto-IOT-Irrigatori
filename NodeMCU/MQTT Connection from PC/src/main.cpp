@@ -7,12 +7,12 @@
 #include <EEPROM.h>
 #include "env.h"
 
-// definizione EEPROM
+// definition EEPROM
 #define EEPROM_SIZE 256
 #define CONFIG_MAGIC 0xABCD1234
 #define MAX_NAME_LEN 32
 
-// Pulsante reset configurazione
+// Pin reset-config button
 #define RESET_BUTTON_PIN 4
 
 // DHT sensore epompe
@@ -25,7 +25,7 @@ String topicHello = "greenhouse/sensor/hello";
 String topicStatus;
 String topicConfig;
 
-// --- Config dinamica
+// --- Dynamic configuration
 String deviceName;
 float thresholdMin;
 float thresholdMax;
@@ -34,7 +34,7 @@ int humidityPin;
 bool isConfigured = false;
 unsigned long lastUpdate = 0;
 
-// -- Configurazione salvata in EEPROM
+// -- Configuration saved in the EEPROM
 struct StoredConfig
 {
   uint32_t magic;
@@ -48,15 +48,15 @@ struct StoredConfig
   char macAddress[18]; // MAC address in string format
 };
 
-// -- Massimo numero pompe irrigatore
+// -- Max number of pumps per Irrigator
 int pumpPins[MAX_PUMPS];
 int pumpCount = 0;
 
 // --- DHT dinamico ---
 DHT *dht = nullptr;
-float simulatedHumidity = 50.0; // valore di partenza, modificalo se vuoi
+float simulatedHumidity = 50.0; // Initial value, for testing
 unsigned long lastHumidityChange = 0;
-const unsigned long humidityChangeInterval = 1000; // 1 secondo, fisso
+const unsigned long humidityChangeInterval = 1000; // 1 second separated from the update interval
 
 const char *greenhouseSensors = "greenhouse/sensor";
 WiFiClientSecure espClient;
@@ -179,7 +179,7 @@ void saveConfigToEEPROM()
   }
 
   EEPROM.put(0, cfg);
-  EEPROM.commit(); // fondamentale su ESP32, altrimenti non scrive davvero
+  EEPROM.commit(); // Essential to actually write on wokwi simulator
   Serial.println("Configuration saved to EEPROM");
 }
 
@@ -191,7 +191,7 @@ void checkResetButton()
   {
     lastPress = millis();
     Serial.println("Reset button pressed : restarting device...");
-    delay(100); // piccolo debounce
+    delay(100); // small delay for the restart
     ESP.restart();
   }
 }
@@ -224,6 +224,7 @@ void callback(char *topicCallBack, byte *payload, unsigned int length)
       return;
     }
 
+    // RESET
     if (doc["reset"] == true)
     {
       Serial.println("Reset command received: clearing EEPROM and restarting...");
@@ -235,7 +236,7 @@ void callback(char *topicCallBack, byte *payload, unsigned int length)
       delay(100);
       ESP.restart();
     }
-
+    // Acknowledge handler
     if (doc["name"].isNull() || doc["updateInterval"].isNull() ||
         doc["pinHumidity"].isNull() || doc["thresholdMin"].isNull() ||
         doc["thresholdMax"].isNull())
@@ -248,7 +249,7 @@ void callback(char *topicCallBack, byte *payload, unsigned int length)
     thresholdMin = doc["thresholdMin"].as<float>();
     thresholdMax = doc["thresholdMax"].as<float>();
     humidityPin = doc["pinHumidity"].as<int>();
-    updateInterval = doc["updateInterval"].as<unsigned long>() * 1000; // Conversione in millisecondi
+    updateInterval = doc["updateInterval"].as<unsigned long>() * 1000; // Conversion to millis
     JsonArray pumps = doc["pinPumps"];
     pumpCount = 0;
 
@@ -340,7 +341,7 @@ void setup()
     macAddress.replace(":", "");
   }
 
-  // Costruzione topic dinamici
+  // Dynamic topics based on macAddress
   topicStatus = "greenhouse/sensor/status/" + macAddress;
   topicConfig = "greenhouse/sensor/config/" + macAddress;
 
@@ -359,7 +360,7 @@ void setup()
   pinMode(RESET_BUTTON_PIN, INPUT_PULLUP);
 }
 
-bool useSimulatedHumidity = true; // put it false to use real DHT
+bool useSimulatedHumidity = true; // if false uses real DHT
 
 float readHumidity()
 {
@@ -378,6 +379,7 @@ float readHumidity()
   return h;
 }
 
+//the pumps controls that the humidity stays in-range
 void controlPumps(float humidity)
 {
 
@@ -419,7 +421,7 @@ void updateSimulatedHumidity()
 
     simulatedHumidity += pumpActive ? 1 : -1;
 
-    // clamp tra 0 e 100
+    // caps the humidity
     if (simulatedHumidity > 100)
       simulatedHumidity = 100;
     if (simulatedHumidity < 0)
